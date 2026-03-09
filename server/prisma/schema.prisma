@@ -1,0 +1,76 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Or "mongodb" based on your preference
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ORGANIZER
+  ADMIN
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  role          Role     @default(USER)
+  createdAt     DateTime @default(now())
+  
+  // Relations
+  events        Event[]  @relation("OrganizerEvents")
+  tickets       Ticket[]
+}
+
+model Event {
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  venue           String
+  date            DateTime
+  category        String
+  price           Float
+  totalTickets    Int
+  availableTickets Int
+  imageUrl        String?
+  organizerId     String
+  status          String   @default("active") // active, cancelled, completed
+  createdAt       DateTime @default(now())
+
+  // Relations
+  organizer       User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  tickets         Ticket[]
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  ticketHash  String   @unique // For security validation
+  qrCode      String   // Base64 or URL to the generated QR
+  status      String   @default("valid") // valid, used, refunded
+  pricePaid   Float
+  purchaseDate DateTime @default(now())
+  
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id])
+  paymentId   String?  @unique
+  payment     Payment? @relation(fields: [paymentId], references: [id])
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  stripeId      String   @unique
+  amount        Float
+  currency      String   @default("usd")
+  status        String   // succeeded, pending, failed
+  createdAt     DateTime @default(now())
+  
+  ticket        Ticket?
+}
