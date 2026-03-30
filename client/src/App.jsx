@@ -1,27 +1,24 @@
+// frontend/src/App.jsx
 import React, { useMemo } from "react";
-import { BrowserRouter as Router } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider as MuiThemeProvider, CssBaseline } from "@mui/material";
 import { Toaster } from "react-hot-toast";
 
 // Context Providers
 import { AuthProvider } from "./context/AuthContext";
-import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { EventProvider } from "./context/EventContext";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 
-// Theme Configuration
+// Theme configuration
 import { createAppTheme } from "./theme/muiTheme";
 
-// Routes Engine
+// Pages
 import AppRoutes from "./routes/AppRoutes";
+import TicketOptions from "./pages/TicketOptions";
 
-/**
- * The Root Component
- * Wraps the application in the necessary Context and Style Providers.
- */
 const AppContent = () => {
   const { darkMode } = useTheme();
 
-  // Memoize the MUI theme to prevent re-calculation on every render
   const theme = useMemo(
     () => createAppTheme(darkMode ? "dark" : "light"),
     [darkMode],
@@ -29,13 +26,11 @@ const AppContent = () => {
 
   return (
     <MuiThemeProvider theme={theme}>
-      {/* CssBaseline kicks off MUI's CSS reset to ensure consistent cross-browser rendering */}
       <CssBaseline />
 
-      <EventProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <EventProvider>
           <Router>
-            {/* Industry-standard Notification System */}
             <Toaster
               position="top-right"
               toastOptions={{
@@ -44,16 +39,23 @@ const AppContent = () => {
                   borderRadius: "12px",
                   background: darkMode ? "#1e293b" : "#ffffff",
                   color: darkMode ? "#f8fafc" : "#1e293b",
-                  border: darkMode ? "1px solid #334155" : "1px solid #e2e8f0",
                 },
               }}
             />
 
-            {/* The actual routing logic */}
-            <AppRoutes />
+            <Routes>
+              {/* Main App Routes */}
+              <Route path="/*" element={<AppRoutes />} />
+
+              {/* ✅ Ticket Options Page */}
+              <Route
+                path="/event/:eventId/tickets"
+                element={<TicketOptions />}
+              />
+            </Routes>
           </Router>
-        </AuthProvider>
-      </EventProvider>
+        </EventProvider>
+      </AuthProvider>
     </MuiThemeProvider>
   );
 };

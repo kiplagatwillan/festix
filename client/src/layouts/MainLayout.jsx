@@ -7,7 +7,7 @@ import Footer from "../components/common/Footer";
 const MainLayout = () => {
   const { pathname } = useLocation();
 
-  // World-Class UX: Auto-scroll to top on route change
+  // Auto-scroll to top on route change for smooth UX
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [pathname]);
@@ -16,7 +16,7 @@ const MainLayout = () => {
     <div className="flex flex-col min-h-screen bg-white dark:bg-gray-950 transition-colors duration-500">
       <Navbar />
 
-      {/* Main Content Area */}
+      {/* Main Content Area with page transition */}
       <main className="flex-grow">
         <AnimatePresence mode="wait">
           <motion.div
@@ -27,7 +27,7 @@ const MainLayout = () => {
             transition={{ duration: 0.3, ease: "easeOut" }}
             className="w-full"
           >
-            <Outlet />
+            <Outlet /> {/* Nested routes render here */}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -7,7 +7,6 @@ import { Ticket, ArrowRight } from "lucide-react";
 const Login = () => {
   return (
     <div className="min-h-screen flex bg-white dark:bg-gray-900">
-      {/* Left Side: Form Section */}
       <div className="flex-1 flex flex-col justify-center px-8 py-12 sm:px-12 lg:flex-none lg:px-24 xl:px-32">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -30,10 +29,8 @@ const Login = () => {
               Enter your credentials to access your tickets.
             </p>
           </div>
-
           <div className="mt-8">
             <LoginForm />
-
             <div className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-800">
               <p className="text-center text-sm text-gray-600 dark:text-gray-400">
                 Don't have an account?{" "}
@@ -48,13 +45,11 @@ const Login = () => {
           </div>
         </motion.div>
       </div>
-
-      {/* Right Side: Visual Content (Hidden on Mobile) */}
       <div className="hidden lg:block relative flex-1 w-0">
         <img
           className="absolute inset-0 h-full w-full object-cover"
           src="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80"
-          alt="Concert background"
+          alt="Concert"
         />
         <div className="absolute inset-0 bg-indigo-600/20 backdrop-blur-[2px] flex items-center justify-center">
           <div className="p-12 text-white max-w-lg">
@@ -62,8 +57,7 @@ const Login = () => {
               Experience the world's best events.
             </h3>
             <p className="text-lg text-indigo-50 font-medium opacity-90">
-              From underground raves to corporate summits, Festix is your
-              gateway to unforgettable moments.
+              Festix is your gateway to unforgettable moments.
             </p>
           </div>
         </div>

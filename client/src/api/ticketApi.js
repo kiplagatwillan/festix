@@ -1,20 +1,46 @@
+// src/api/ticketApi.js
 import axiosInstance from "./axiosInstance";
 
 /**
- * @desc Fetch all tickets belonging to the currently authenticated user
- * @returns {Promise<Array>} List of tickets with event details
+ * Fetch all tickets for the logged-in user
  */
 export const getMyTickets = async () => {
-  const { data } = await axiosInstance.get("/tickets/my-tickets");
-  return data;
+  try {
+    const { data } = await axiosInstance.get("/tickets/my-tickets");
+    return data;
+  } catch (err) {
+    console.error(
+      "Error fetching tickets:",
+      err.response?.status,
+      err.response?.data,
+    );
+    // Return empty array to prevent UI crash
+    return { tickets: [] };
+  }
 };
 
 /**
- * @desc Fetch details for a specific ticket including QR data
- * @param {string} id - The Ticket ID
- * @returns {Promise<Object>} Detailed ticket object
+ * Buy a ticket for a given event
+ * @param {string} eventId
+ * @param {number} quantity
  */
-export const getTicketDetails = async (id) => {
-  const { data } = await axiosInstance.get(`/tickets/${id}`);
-  return data;
+export const buyTicketAPI = async (eventId, quantity = 1) => {
+  if (!eventId) throw new Error("Event ID is required to buy ticket");
+
+  try {
+    const { data } = await axiosInstance.post("/tickets/purchase", {
+      eventId,
+      quantity,
+    });
+
+    return data;
+  } catch (err) {
+    console.error(
+      "Error buying ticket:",
+      err.response?.status,
+      err.response?.data || err.message,
+    );
+    // Re-throw to handle in context or component
+    throw err;
+  }
 };

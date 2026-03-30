@@ -1,76 +1,149 @@
-// This is your Prisma schema file
+// =======================================
+// Prisma Client Generator
+// =======================================
 generator client {
   provider = "prisma-client-js"
 }
 
+// =======================================
+// Database Connection
+// =======================================
 datasource db {
-  provider = "postgresql" // Or "mongodb" based on your preference
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// =======================================
+// ENUMS
+// =======================================
 enum Role {
   USER
   ORGANIZER
   ADMIN
 }
 
+enum EventStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  SUCCEEDED
+  PENDING
+  FAILED
+}
+
+// =======================================
+// USER MODEL
+// =======================================
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String
-  name          String
-  role          Role     @default(USER)
-  createdAt     DateTime @default(now())
-  
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+
   // Relations
-  events        Event[]  @relation("OrganizerEvents")
-  tickets       Ticket[]
+  events  Event[]  @relation("OrganizerEvents")
+  tickets Ticket[]
+
+  @@index([email])
 }
 
+// =======================================
+// EVENT MODEL
+// =======================================
 model Event {
-  id              String   @id @default(uuid())
-  title           String
-  description     String
-  venue           String
-  date            DateTime
-  category        String
-  price           Float
-  totalTickets    Int
+  id               String       @id @default(uuid())
+  title            String
+  description      String       @db.Text
+  venue            String
+  date             DateTime
+  category         String       @default("General")
+  totalTickets     Int
   availableTickets Int
-  imageUrl        String?
-  organizerId     String
-  status          String   @default("active") // active, cancelled, completed
-  createdAt       DateTime @default(now())
+  imageUrl         String?
+  status           EventStatus  @default(ACTIVE)
+  createdAt        DateTime     @default(now())
 
-  // Relations
-  organizer       User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
-  tickets         Ticket[]
+  // Organizer relation
+  organizerId String
+  organizer   User   @relation("OrganizerEvents", fields: [organizerId], references: [id])
+
+  // Ticket & TicketTier relation
+  tickets     Ticket[]
+  ticketTiers TicketTier[]
+
+  @@index([organizerId])
+  @@index([date])
+  @@index([category])
 }
 
-model Ticket {
+// =======================================
+// TICKET TIER MODEL
+// =======================================
+model TicketTier {
   id          String   @id @default(uuid())
-  ticketHash  String   @unique // For security validation
-  qrCode      String   // Base64 or URL to the generated QR
-  status      String   @default("valid") // valid, used, refunded
-  pricePaid   Float
-  purchaseDate DateTime @default(now())
-  
-  // Relations
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id])
-  paymentId   String?  @unique
-  payment     Payment? @relation(fields: [paymentId], references: [id])
+  name        String   // "Early Bird", "VIP", "VVIP"
+  price       Float
+  capacity    Int      // Max tickets for this tier
+  available   Int      // Remaining tickets
+  description String?  // Optional: "Includes free drink", etc.
+
+  // Relation to Event
+  eventId String
+  event   Event   @relation(fields: [eventId], references: [id])
+
+  tickets Ticket[]
 }
 
+// =======================================
+// TICKET MODEL
+// =======================================
+model Ticket {
+  id           String       @id @default(uuid())
+  ticketHash   String       @unique
+  qrCode       String
+  status       TicketStatus @default(VALID)
+  pricePaid    Float
+  purchaseDate DateTime     @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+
+  ticketTierId String?
+  ticketTier   TicketTier? @relation(fields: [ticketTierId], references: [id])
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([ticketTierId])
+}
+
+// =======================================
+// PAYMENT MODEL
+// =======================================
 model Payment {
-  id            String   @id @default(uuid())
-  stripeId      String   @unique
-  amount        Float
-  currency      String   @default("usd")
-  status        String   // succeeded, pending, failed
-  createdAt     DateTime @default(now())
-  
-  ticket        Ticket?
+  id        String        @id @default(uuid())
+  stripeId  String        @unique
+  amount    Float
+  currency  String        @default("usd")
+  status    PaymentStatus
+  createdAt DateTime      @default(now())
+
+  ticket Ticket?
 }

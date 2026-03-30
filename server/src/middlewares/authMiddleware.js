@@ -1,39 +1,57 @@
+// src/middlewares/authMiddleware.js
 import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
-import prisma from "../db.js"; // Using our central DB instance
+import prisma from "../db.js";
 
-// @desc    Protect routes - Verify JWT in cookies
+/*
+|--------------------------------------------------------------------------
+| PROTECT ROUTES
+|--------------------------------------------------------------------------
+| Verifies JWT from cookies or Authorization header and attaches user to request
+*/
 export const protect = asyncHandler(async (req, res, next) => {
-  let token = req.cookies.jwt;
+  let token;
 
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // Look for token in cookies OR Authorization header
+  if (req.cookies?.festix_token) {
+    token = req.cookies.festix_token;
+  } else if (req.headers.authorization?.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
 
-      // Fetch user and attach to request object
-      req.user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
-        select: { id: true, name: true, email: true, role: true },
-      });
-
-      if (!req.user) {
-        res.status(401);
-        throw new Error("User not found, authorization denied");
-      }
-
-      next();
-    } catch (error) {
-      console.error("Auth Error:", error.message);
-      res.status(401);
-      throw new Error("Not authorized, token invalid or expired");
-    }
-  } else {
+  if (!token) {
     res.status(401);
-    throw new Error("Not authorized, no session token found");
+    throw new Error("Not authorized, no token found");
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: { id: true, name: true, email: true, role: true },
+    });
+
+    if (!user) {
+      res.status(401);
+      throw new Error("User associated with this token no longer exists");
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error("Auth Error:", error.message);
+    res.status(401);
+    throw new Error("Not authorized, token invalid or expired");
   }
 });
 
-// @desc    Authorize specific roles (ADMIN, ORGANIZER, etc.)
+/*
+|--------------------------------------------------------------------------
+| AUTHORIZE ROLES
+|--------------------------------------------------------------------------
+| Usage: authorize("ADMIN", "ORGANIZER")
+*/
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -43,11 +61,24 @@ export const authorize = (...roles) => {
 
     if (!roles.includes(req.user.role)) {
       res.status(403);
-      throw new Error(
-        `Forbidden: Role '${req.user.role}' does not have access`,
-      );
+      throw new Error(`Access denied: Role '${req.user.role}' unauthorized`);
     }
 
     next();
   };
+};
+
+/*
+|--------------------------------------------------------------------------
+| ORGANIZER MIDDLEWARE
+|--------------------------------------------------------------------------
+| Shortcut for organizer-only routes
+*/
+export const organizer = (req, res, next) => {
+  if (req.user && req.user.role === "ORGANIZER") {
+    return next();
+  }
+
+  res.status(403);
+  throw new Error("Access denied: Organizers only");
 };
