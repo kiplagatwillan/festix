@@ -1,13 +1,11 @@
 import asyncHandler from "express-async-handler";
 import prisma from "../db.js";
 
-/* =====================================================
- DEFAULT CATEGORY IMAGES
-===================================================== */
 const CATEGORY_IMAGES = {
   Music: "http://localhost:5000/uploads/music-default.jpg",
   Sports: "http://localhost:5000/uploads/sports-default.jpg",
   Tech: "http://localhost:5000/uploads/tech-default.jpg",
+  Festival: "http://localhost:5000/uploads/festival-default.jpg",
   General: "http://localhost:5000/uploads/default-event.jpg",
 };
 
@@ -15,287 +13,207 @@ const CATEGORY_IMAGES = {
  CREATE EVENT
 ===================================================== */
 export const createEvent = asyncHandler(async (req, res) => {
-  const {
-    title,
-    description,
-    venue,
-    date,
-    category,
-    totalTickets,
-    imageUrl,
-    ticketTiers,
-  } = req.body;
-
-  if (!req.user?.id) {
-    return res.status(401).json({ message: "Authorization required" });
+  let parsedTiers = [];
+  try {
+    parsedTiers =
+      typeof req.body.ticketTiers === "string"
+        ? JSON.parse(req.body.ticketTiers)
+        : req.body.ticketTiers;
+  } catch (error) {
+    return res.status(400).json({ message: "Invalid ticketTiers format." });
   }
 
-  if (!title || !venue || !date || !totalTickets) {
-    return res.status(400).json({
-      message: "Required fields: title, venue, date, totalTickets",
-    });
+  const { title, description, venue, date, category, imageUrl } = req.body;
+
+  if (!title || !venue || !date || !parsedTiers || parsedTiers.length === 0) {
+    return res.status(400).json({ message: "Missing required fields." });
   }
 
-  // 🔥 STEP 6 FIX: Ensure ticketTiers is provided
-  if (!ticketTiers || !Array.isArray(ticketTiers) || ticketTiers.length === 0) {
-    return res.status(400).json({
-      message:
-        "ticketTiers is required. Example: [{name: 'Regular', price: 10, capacity: 100}]",
-    });
-  }
+  const calculatedTotal = parsedTiers.reduce(
+    (acc, tier) => acc + (parseInt(tier.capacity) || 0),
+    0,
+  );
 
-  const selectedCategory = category || "General";
-
-  let finalImageUrl =
-    CATEGORY_IMAGES[selectedCategory] || CATEGORY_IMAGES["General"];
-
+  let finalImageUrl = CATEGORY_IMAGES[category] || CATEGORY_IMAGES["General"];
   if (req.file) {
     finalImageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-  } else if (imageUrl && imageUrl.trim() !== "") {
+  } else if (imageUrl && imageUrl.trim() !== "" && imageUrl !== "undefined") {
     finalImageUrl = imageUrl.trim();
   }
 
-  const finalDescription =
-    description?.trim() ||
-    `Experience ${selectedCategory} at ${venue}. Join "${title}".`;
-
-  try {
-    const event = await prisma.event.create({
-      data: {
-        title: title.trim(),
-        description: finalDescription,
-        venue: venue.trim(),
-        date: new Date(date),
-        category: selectedCategory,
-        totalTickets: parseInt(totalTickets),
-        availableTickets: parseInt(totalTickets),
-        imageUrl: finalImageUrl,
-        organizerId: req.user.id,
-        // ✅ Create ticket tiers safely
-        ticketTiers: {
-          create: ticketTiers.map((tier) => ({
-            name: tier.name,
-            price: parseFloat(tier.price),
-            capacity: parseInt(tier.capacity),
-            available: parseInt(tier.capacity),
-            description: tier.description || "",
-          })),
-        },
+  const event = await prisma.event.create({
+    data: {
+      title: title.trim(),
+      description: description?.trim() || `Experience ${category} at ${venue}.`,
+      venue: venue.trim(),
+      date: new Date(date),
+      category: category || "General",
+      totalTickets: calculatedTotal,
+      availableTickets: calculatedTotal,
+      imageUrl: finalImageUrl,
+      organizerId: req.user.id,
+      ticketTiers: {
+        create: parsedTiers.map((tier) => ({
+          name: tier.name,
+          price: parseFloat(tier.price) || 0,
+          capacity: parseInt(tier.capacity) || 0,
+          available: parseInt(tier.capacity) || 0,
+          description: tier.description || "",
+        })),
       },
-      include: {
-        ticketTiers: true,
-      },
-    });
+    },
+    include: { ticketTiers: true },
+  });
 
-    console.log("✅ EVENT CREATED:", event.id);
-    res.status(201).json(event);
-  } catch (error) {
-    console.error("❌ CREATE EVENT ERROR:", error);
-    res.status(500).json({
-      message: "Failed to create event",
-      error: error.message,
-    });
+  res.status(201).json(event);
+});
+
+/* =====================================================
+ UPDATE EVENT 
+===================================================== */
+export const updateEvent = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const event = await prisma.event.findUnique({
+    where: { id },
+    include: { ticketTiers: true },
+  });
+
+  if (!event) return res.status(404).json({ message: "Event not found" });
+
+  if (event.organizerId !== req.user.id && req.user.role !== "ADMIN") {
+    return res.status(403).json({ message: "Not authorized" });
   }
+
+  const { title, description, venue, date, category, imageUrl } = req.body;
+
+  const updateData = {
+    title: title || event.title,
+    description: description || event.description,
+    venue: venue || event.venue,
+    date: date ? new Date(date) : event.date,
+    category: category || event.category,
+  };
+
+  // Handle Image Update
+  if (req.file) {
+    updateData.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+  } else if (imageUrl) {
+    updateData.imageUrl = imageUrl;
+  }
+
+  const updatedEvent = await prisma.event.update({
+    where: { id },
+    data: updateData,
+    include: { ticketTiers: true },
+  });
+
+  res.status(200).json(updatedEvent);
 });
 
 /* =====================================================
  GET ALL EVENTS
 ===================================================== */
 export const getEvents = asyncHandler(async (req, res) => {
-  try {
-    const { search = "", category = "", minPrice, maxPrice, date } = req.query;
-    const filters = [];
+  const { search, category, minPrice, maxPrice, date } = req.query;
+  const where = {};
 
-    if (search) {
-      filters.push({
-        OR: [
-          { title: { contains: search, mode: "insensitive" } },
-          { description: { contains: search, mode: "insensitive" } },
-        ],
-      });
-    }
-
-    if (category && category !== "All") {
-      filters.push({ category });
-    }
-
-    if (date) {
-      filters.push({ date: { gte: new Date(date) } });
-    }
-
-    if (minPrice || maxPrice) {
-      filters.push({
-        ticketTiers: {
-          some: {
-            price: {
-              gte: Number(minPrice) || 0,
-              lte: Number(maxPrice) || 100000,
-            },
-          },
-        },
-      });
-    }
-
-    const events = await prisma.event.findMany({
-      where: filters.length ? { AND: filters } : {},
-      orderBy: { date: "asc" },
-      include: {
-        organizer: { select: { name: true } },
-        ticketTiers: true,
-      },
-    });
-
-    console.log("🔥 FETCHED EVENTS:", events.length);
-    res.status(200).json(events);
-  } catch (error) {
-    console.error("❌ FETCH EVENTS ERROR:", error);
-    res.status(500).json({
-      message: "Database query failed",
-      error: error.message,
-    });
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: "insensitive" } },
+      { venue: { contains: search, mode: "insensitive" } },
+    ];
   }
+  if (category && category !== "All") where.category = category;
+  if (date) where.date = { gte: new Date(date) };
+  if (minPrice || maxPrice) {
+    where.ticketTiers = {
+      some: {
+        price: {
+          gte: parseFloat(minPrice) || 0,
+          lte: parseFloat(maxPrice) || 1000000,
+        },
+      },
+    };
+  }
+
+  const events = await prisma.event.findMany({
+    where,
+    orderBy: { date: "asc" },
+    include: {
+      ticketTiers: {
+        select: { price: true, name: true, capacity: true, available: true },
+      },
+      organizer: { select: { name: true } },
+    },
+  });
+
+  res.status(200).json(events);
 });
 
 /* =====================================================
  GET SINGLE EVENT
 ===================================================== */
 export const getEventById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const event = await prisma.event.findUnique({
+    where: { id: req.params.id },
+    include: {
+      organizer: { select: { name: true, email: true } },
+      ticketTiers: true,
+    },
+  });
 
-  if (!id || id === "undefined") {
-    return res.status(400).json({ message: "Invalid event ID" });
-  }
-
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id },
-      include: {
-        organizer: { select: { name: true, email: true } },
-        ticketTiers: true,
-      },
-    });
-
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-
-    res.status(200).json(event);
-  } catch (error) {
-    console.error("❌ GET EVENT ERROR:", error);
-    res.status(500).json({
-      message: "Event retrieval failed",
-      error: error.message,
-    });
-  }
+  if (!event) return res.status(404).json({ message: "Event not found" });
+  res.status(200).json(event);
 });
 
 /* =====================================================
  GET ORGANIZER EVENTS
 ===================================================== */
 export const getOrganizerEvents = asyncHandler(async (req, res) => {
-  if (!req.user?.id) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  try {
-    const events = await prisma.event.findMany({
-      where: { organizerId: req.user.id },
-      orderBy: { createdAt: "desc" },
-      include: { ticketTiers: true },
-    });
-
-    res.status(200).json(events);
-  } catch (error) {
-    console.error("❌ MY EVENTS ERROR:", error);
-    res.status(500).json({
-      message: "Failed to load your events",
-      error: error.message,
-    });
-  }
+  const events = await prisma.event.findMany({
+    where: { organizerId: req.user.id },
+    include: { ticketTiers: true },
+    orderBy: { createdAt: "desc" },
+  });
+  res.status(200).json(events);
 });
 
 /* =====================================================
- UPDATE EVENT
-===================================================== */
-export const updateEvent = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  if (!id) return res.status(400).json({ message: "Event ID required" });
-
-  try {
-    const event = await prisma.event.findUnique({ where: { id } });
-
-    if (!event) return res.status(404).json({ message: "Event not found" });
-
-    if (event.organizerId !== req.user.id && req.user.role !== "ADMIN") {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-
-    const updateData = { ...req.body };
-
-    if (updateData.totalTickets !== undefined) {
-      const newTotal = parseInt(updateData.totalTickets);
-      updateData.totalTickets = newTotal;
-
-      if (event.availableTickets > newTotal) {
-        updateData.availableTickets = newTotal;
-      }
-    }
-
-    if (req.file) {
-      updateData.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-    }
-
-    // 🔥 Ensure updated ticketTiers are valid (optional)
-    if (updateData.ticketTiers && updateData.ticketTiers.length === 0) {
-      return res.status(400).json({
-        message: "ticketTiers cannot be empty. Provide at least one tier.",
-      });
-    }
-
-    const updatedEvent = await prisma.event.update({
-      where: { id },
-      data: updateData,
-    });
-
-    res.status(200).json(updatedEvent);
-  } catch (error) {
-    console.error("❌ UPDATE ERROR:", error);
-    res.status(500).json({
-      message: "Event update failed",
-      error: error.message,
-    });
-  }
-});
-
-/* =====================================================
- DELETE EVENT
+ DELETE EVENT (Fixed with Cascading Transaction)
 ===================================================== */
 export const deleteEvent = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const event = await prisma.event.findUnique({ where: { id } });
 
-  if (!id) return res.status(400).json({ message: "Event ID required" });
+  if (!event) return res.status(404).json({ message: "Event not found" });
 
+  if (event.organizerId !== req.user.id && req.user.role !== "ADMIN") {
+    return res
+      .status(403)
+      .json({ message: "Not authorized to delete this event" });
+  }
+
+  /**
+   * ✅ FIX: Use a Transaction to delete children first.
+   * This prevents the "Foreign Key Constraint" 500 error.
+   */
   try {
-    const event = await prisma.event.findUnique({ where: { id } });
+    await prisma.$transaction([
+      // 1. Delete associated ticket tiers
+      prisma.ticketTier.deleteMany({ where: { eventId: id } }),
+      // 2. Delete associated tickets (if applicable in your schema)
+      prisma.ticket?.deleteMany({ where: { eventId: id } }),
+      // 3. Finally delete the event
+      prisma.event.delete({ where: { id } }),
+    ]);
 
-    if (!event) return res.status(404).json({ message: "Event not found" });
-
-    if (event.organizerId !== req.user.id && req.user.role !== "ADMIN") {
-      return res.status(403).json({ message: "Permission denied" });
-    }
-
-    await prisma.event.delete({ where: { id } });
-
-    res.status(200).json({
-      message: "Event successfully removed",
-      id,
-    });
+    res
+      .status(200)
+      .json({ message: "Event and associated tiers deleted successfully", id });
   } catch (error) {
-    console.error("❌ DELETE ERROR:", error);
-    res.status(500).json({
-      message: "Deletion failed",
-      error: error.message,
-    });
+    console.error("❌ DELETE TRANSACTION ERROR:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to delete event and its dependencies." });
   }
 });
