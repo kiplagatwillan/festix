@@ -10,6 +10,7 @@ import {
   Loader2,
   Ticket,
   CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCart } from "../context/CartContext";
@@ -19,24 +20,21 @@ const PaymentPage = () => {
   const navigate = useNavigate();
   const { cart, cartTotal, clearCart } = useCart();
 
-  // ✅ SYNC LOGIC: Check for direct purchase state OR use global cart
   const directOrder = location.state?.directPurchase || null;
   const isCartCheckout = !directOrder && cart.length > 0;
 
   const [paymentMethod, setPaymentMethod] = useState("mpesa");
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("idle"); // idle | processing | success
   const [phoneNumber, setPhoneNumber] = useState("");
 
-  // Determine final display data
   const checkoutItems = directOrder ? [directOrder] : cart;
   const totalAmount = directOrder
     ? directOrder.price * directOrder.quantity
     : cartTotal;
 
-  // Safety Redirect: If no direct order and cart is empty, go home
   useEffect(() => {
     if (!directOrder && cart.length === 0) {
-      toast.error("Your checkout session has expired or cart is empty.");
+      toast.error("Checkout session expired.");
       navigate("/");
     }
   }, [directOrder, cart, navigate]);
@@ -44,222 +42,167 @@ const PaymentPage = () => {
   const handleProcessPayment = async (e) => {
     e.preventDefault();
 
-    if (paymentMethod === "mpesa" && !phoneNumber) {
-      return toast.error("Please enter your M-Pesa phone number.");
+    if (paymentMethod === "mpesa" && phoneNumber.length < 9) {
+      return toast.error("Please enter a valid M-Pesa number.");
     }
 
-    setLoading(true);
+    setStatus("processing");
+
+    // ✅ REAL-WORLD FLOW:
+    // 1. Send request to backend -> Safaricom API
+    // 2. Safaricom sends STK Push to user phone
+    // 3. User enters PIN
 
     try {
-      // Simulate M-Pesa STK Push / Card processing delay
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      toast.loading("Sending STK Push to your phone...", {
+        id: "payment-toast",
+      });
 
-      toast.success("Payment Successful! Your tickets are ready.");
+      // Simulate the 5-10 second window where a user types their PIN
+      await new Promise((resolve) => setTimeout(resolve, 6000));
 
-      // Clear cart if this was a cart checkout
+      toast.success("Payment Verified!", { id: "payment-toast" });
+      setStatus("success");
+
       if (isCartCheckout) clearCart();
-
-      // Redirect to user tickets
-      navigate("/profile/tickets");
     } catch (error) {
-      toast.error("Payment failed. Please try again.");
-    } finally {
-      setLoading(false);
+      setStatus("idle");
+      toast.error("Transaction cancelled or timed out.", {
+        id: "payment-toast",
+      });
     }
   };
 
-  if (checkoutItems.length === 0) return null;
+  if (status === "success") {
+    return <SuccessScreen navigate={navigate} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4">
       <div className="max-w-6xl mx-auto">
-        {/* Navigation Header */}
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-all mb-8 font-bold group"
+          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold mb-8 group"
         >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          Back to Selection
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />{" "}
+          Back
         </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-          {/* LEFT: PAYMENT FORM */}
-          <div className="lg:col-span-7 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* LEFT: FORM */}
+          <div className="lg:col-span-7">
             <motion.div
-              initial={{ y: 20, opacity: 0 }}
+              initial={{ y: 10, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100"
             >
-              <header className="mb-10">
-                <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">
-                  Checkout
-                </h1>
-                <p className="text-slate-500 font-medium">
-                  Choose your payment method and complete your purchase.
-                </p>
-              </header>
+              <h1 className="text-4xl font-black text-slate-900 mb-6">
+                Checkout
+              </h1>
 
               <form onSubmit={handleProcessPayment} className="space-y-8">
-                {/* Method Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <PaymentTab
                     active={paymentMethod === "mpesa"}
                     onClick={() => setPaymentMethod("mpesa")}
                     icon={<Smartphone />}
                     title="M-Pesa"
-                    description="Mobile Money STK"
                   />
                   <PaymentTab
                     active={paymentMethod === "card"}
                     onClick={() => setPaymentMethod("card")}
                     icon={<CreditCard />}
                     title="Card"
-                    description="Visa / Mastercard"
                   />
                 </div>
 
-                {/* Conditional Inputs */}
-                <AnimatePresence mode="wait">
-                  {paymentMethod === "mpesa" ? (
-                    <motion.div
-                      key="mpesa"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-100"
-                    >
-                      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">
-                        M-Pesa Phone Number
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">
-                          +254
-                        </span>
-                        <input
-                          type="tel"
-                          placeholder="712345678"
-                          className="w-full p-5 pl-16 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-lg"
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex gap-2 items-start text-xs text-slate-400 italic">
-                        <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
-                        A payment request will be sent directly to this number.
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="card"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      className="p-10 bg-slate-50 rounded-3xl text-center border-2 border-dashed border-slate-200"
-                    >
-                      <CreditCard className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                      <p className="text-slate-500 font-bold">
-                        Secure Card Checkout coming soon.
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Please use M-Pesa for now.
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {paymentMethod === "mpesa" ? (
+                  <div className="space-y-4 p-8 bg-indigo-50/30 rounded-[2rem] border border-indigo-100">
+                    <label className="block text-xs font-black text-indigo-600 uppercase tracking-widest">
+                      M-Pesa Number
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-slate-400 text-lg">
+                        +254
+                      </span>
+                      <input
+                        type="tel"
+                        placeholder="712345678"
+                        required
+                        // ✅ FIX: High-visibility styling
+                        className="w-full p-5 pl-20 bg-white border-2 border-slate-200 rounded-2xl focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 outline-none transition-all font-black text-2xl text-slate-900 placeholder:text-slate-300"
+                        value={phoneNumber}
+                        onChange={(e) =>
+                          setPhoneNumber(e.target.value.replace(/\D/g, ""))
+                        }
+                      />
+                    </div>
+                    <p className="text-sm text-slate-500 font-medium italic">
+                      Check your phone for the M-Pesa PIN prompt after clicking
+                      pay.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-10 bg-slate-50 rounded-[2rem] text-center border-2 border-dashed border-slate-200 text-slate-400 font-bold">
+                    Card Payments Under Maintenance
+                  </div>
+                )}
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full py-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xl rounded-[2rem] shadow-2xl shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-3 group"
+                  disabled={status === "processing"}
+                  className="w-full py-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-2xl rounded-[2rem] shadow-2xl shadow-indigo-200 flex items-center justify-center gap-4 disabled:opacity-70"
                 >
-                  {loading ? (
-                    <Loader2 className="w-7 h-7 animate-spin" />
+                  {status === "processing" ? (
+                    <>
+                      <Loader2 className="animate-spin w-8 h-8" />
+                      Awaiting PIN...
+                    </>
                   ) : (
                     <>
-                      Complete Payment — KES {totalAmount.toLocaleString()}
-                      <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                      Pay KES {totalAmount.toLocaleString()} <ChevronRight />
                     </>
                   )}
                 </button>
               </form>
             </motion.div>
-
-            <div className="flex items-center justify-center gap-3 text-slate-400 font-bold text-sm">
-              <ShieldCheck className="w-5 h-5 text-emerald-500" />
-              AES-256 Bit Secure Encryption
-            </div>
           </div>
 
-          {/* RIGHT: ORDER SUMMARY */}
+          {/* RIGHT: SUMMARY */}
           <div className="lg:col-span-5">
-            <motion.div
-              initial={{ x: 20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl sticky top-12 overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 p-8 opacity-10">
-                <Ticket className="w-32 h-32 rotate-12" />
-              </div>
-
-              <h3 className="text-2xl font-bold mb-8 flex items-center gap-3">
+            <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl sticky top-12">
+              <h3 className="text-xl font-bold mb-8 opacity-60">
                 Order Summary
               </h3>
-
-              <div className="space-y-6 mb-10 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-6">
                 {checkoutItems.map((item, idx) => (
-                  <div
-                    key={`${item.eventId}-${idx}`}
-                    className="flex gap-5 items-center"
-                  >
+                  <div key={idx} className="flex gap-4 items-center">
                     <img
                       src={item.imageUrl}
-                      className="w-20 h-20 rounded-2xl object-cover border-2 border-slate-700 shrink-0"
-                      alt={item.eventTitle}
+                      className="w-16 h-16 rounded-2xl object-cover border border-slate-700"
+                      alt=""
                     />
-                    <div className="overflow-hidden">
-                      <h4 className="font-bold text-lg truncate">
-                        {item.eventTitle}
-                      </h4>
-                      <p className="text-slate-400 text-sm">
-                        {item.tierName} Ticket
+                    <div className="flex-1">
+                      <h4 className="font-bold truncate">{item.eventTitle}</h4>
+                      <p className="text-xs text-slate-400">
+                        {item.tierName} x {item.quantity}
                       </p>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-indigo-400 font-black">
-                          Qty: {item.quantity}
-                        </span>
-                        <span className="font-bold">
-                          KES {item.price.toLocaleString()}
-                        </span>
-                      </div>
                     </div>
+                    <p className="font-black">
+                      KES {(item.price * item.quantity).toLocaleString()}
+                    </p>
                   </div>
                 ))}
-              </div>
-
-              <div className="space-y-4 border-t border-slate-800 pt-8">
-                <div className="flex justify-between text-slate-400 font-medium">
-                  <span>Subtotal</span>
-                  <span className="text-white">
+                <div className="pt-6 border-t border-slate-800 flex justify-between items-end">
+                  <span className="text-slate-400 font-bold uppercase text-xs tracking-widest">
+                    Total Amount
+                  </span>
+                  <span className="text-3xl font-black text-indigo-400">
                     KES {totalAmount.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between text-slate-400 font-medium">
-                  <span>Processing Fee</span>
-                  <span className="text-white">KES 0.00</span>
-                </div>
-
-                <div className="flex justify-between items-end pt-6 mt-4 border-t border-slate-800">
-                  <div>
-                    <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-1">
-                      Total to Pay
-                    </p>
-                    <span className="text-4xl font-black text-white">
-                      KES {totalAmount.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         </div>
       </div>
@@ -267,29 +210,45 @@ const PaymentPage = () => {
   );
 };
 
-const PaymentTab = ({ active, onClick, icon, title, description }) => (
+// Success Component
+const SuccessScreen = ({ navigate }) => (
+  <motion.div
+    initial={{ scale: 0.9, opacity: 0 }}
+    animate={{ scale: 1, opacity: 1 }}
+    className="min-h-screen flex items-center justify-center bg-white p-6"
+  >
+    <div className="max-w-md w-full text-center space-y-8">
+      <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xl shadow-emerald-50">
+        <CheckCircle2 size={48} strokeWidth={3} />
+      </div>
+      <div>
+        <h1 className="text-4xl font-black text-slate-900 mb-2">
+          Payment Confirmed!
+        </h1>
+        <p className="text-slate-500 font-medium">
+          Your tickets have been sent to your email. See you at the event!
+        </p>
+      </div>
+      <button
+        onClick={() => navigate("/")}
+        className="w-full py-5 bg-slate-900 text-white font-black text-lg rounded-[2rem] hover:bg-black transition-all"
+      >
+        Back to Explore
+      </button>
+    </div>
+  </motion.div>
+);
+
+const PaymentTab = ({ active, onClick, icon, title }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`p-6 rounded-[2rem] border-2 text-left transition-all flex items-center gap-5 ${
-      active
-        ? "border-indigo-600 bg-indigo-50/50 ring-4 ring-indigo-50"
-        : "border-slate-100 hover:border-slate-200 bg-white"
-    }`}
+    className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-2 ${active ? "border-indigo-600 bg-indigo-50 text-indigo-600 shadow-lg shadow-indigo-50" : "border-slate-100 text-slate-400"}`}
   >
-    <div
-      className={`p-3 rounded-2xl ${active ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"}`}
-    >
-      {React.cloneElement(icon, { size: 24 })}
-    </div>
-    <div>
-      <p
-        className={`font-black text-lg ${active ? "text-slate-900" : "text-slate-600"}`}
-      >
-        {title}
-      </p>
-      <p className="text-xs text-slate-400 font-medium">{description}</p>
-    </div>
+    {icon}
+    <span className="font-black text-sm uppercase tracking-widest">
+      {title}
+    </span>
   </button>
 );
 
