@@ -1,49 +1,54 @@
-// src/pages/organizer/TicketOptions.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ShoppingCart, Zap } from "lucide-react";
-import { getEventById } from "../api/eventApi"; // ✅ FIXED IMPORT
+import { ShoppingCart, Zap, ArrowLeft, Loader2, Info } from "lucide-react";
+import { getEventById } from "../api/eventApi";
+import { useCart } from "../context/CartContext"; // ✅ Added Cart Context
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 
 const TicketOptions = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const { addToCart } = useCart(); // ✅ Initialize Cart Hook
 
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [selectedTier, setSelectedTier] = useState(null);
   const [quantity, setQuantity] = useState(1);
 
+  const fallbackImage =
+    "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80";
+
   /* =====================================================
-     FETCH EVENT
+     FETCH EVENT DATA
   ===================================================== */
   useEffect(() => {
     const fetchEvent = async () => {
       try {
         setLoading(true);
-
         const data = await getEventById(eventId);
-
         setEvent(data);
 
-        if (!data?.ticketTiers || data.ticketTiers.length === 0) {
+        if (data?.ticketTiers?.length > 0) {
+          // Auto-select first available tier
+          setSelectedTier(data.ticketTiers[0]);
+        } else {
           toast.error("No ticket tiers available for this event");
         }
       } catch (err) {
         console.error(err);
         toast.error("Failed to load ticket options");
-        navigate("/"); // fallback
+        navigate("/");
       } finally {
         setLoading(false);
       }
     };
-
     fetchEvent();
   }, [eventId, navigate]);
 
   /* =====================================================
-     HANDLE PROCEED
+     ✅ CORRECTED HANDLE PROCEED
+     Syncs perfectly with CartContext and PaymentPage
   ===================================================== */
   const handleProceed = (type) => {
     if (!selectedTier) {
@@ -51,159 +56,197 @@ const TicketOptions = () => {
       return;
     }
 
-    const orderData = {
-      eventId,
-      tierId: selectedTier.id,
+    // Standardized object used across the entire app
+    const itemData = {
+      eventId: event.id,
+      eventTitle: event.title,
+      venue: event.venue,
+      date: event.date,
       tierName: selectedTier.name,
-      quantity,
-      totalPrice: selectedTier.price * quantity,
+      price: selectedTier.price,
+      quantity: quantity,
+      imageUrl: event.imageUrl || fallbackImage,
     };
 
     if (type === "BUY_NOW") {
-      navigate("/checkout/payment", { state: { orderData } });
+      // ✅ FIX: Use 'directPurchase' to match PaymentPage expectations
+      navigate("/checkout/payment", {
+        state: { directPurchase: itemData },
+      });
     } else {
-      console.log("Added to cart:", orderData);
-      toast.success("Ticket reserved (cart coming soon)");
+      // ✅ FIX: Actually adds to the global cart
+      addToCart(itemData);
+      // Toast is handled inside CartContext, but we can add an extra one if desired
     }
   };
 
-  /* =====================================================
-     LOADING STATE
-  ===================================================== */
   if (loading) {
     return (
-      <div className="p-20 text-center text-gray-500">
-        Loading ticket options...
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mb-4" />
+        <p className="text-slate-500 font-bold">Fetching the best seats...</p>
       </div>
     );
   }
 
-  if (!event) {
-    return (
-      <div className="p-20 text-center">
-        <p className="text-red-500">Event not found</p>
-      </div>
-    );
-  }
+  if (!event) return null;
 
-  /* =====================================================
-     UI
-  ===================================================== */
   return (
-    <div className="max-w-5xl mx-auto p-6 min-h-screen">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* LEFT: Ticket Selection */}
-        <div className="lg:col-span-2 space-y-6">
-          <h1 className="text-3xl font-black dark:text-white">
-            Select Your Tickets
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-6xl mx-auto px-4 py-12 min-h-screen"
+    >
+      {/* Header */}
+      <div className="mb-10 flex items-center justify-between">
+        <div>
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold mb-4 transition-colors"
+          >
+            <ArrowLeft size={18} /> Back to Event
+          </button>
+          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+            Select Your Experience
           </h1>
-
-          {event.ticketTiers?.length > 0 ? (
-            <div className="space-y-4">
-              {event.ticketTiers.map((tier) => (
-                <div
-                  key={tier.id}
-                  onClick={() => setSelectedTier(tier)}
-                  className={`p-6 rounded-2xl border-2 transition-all cursor-pointer ${
-                    selectedTier?.id === tier.id
-                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20"
-                      : "border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-bold dark:text-white">
-                        {tier.name}
-                      </h3>
-
-                      <p className="text-sm text-gray-500 mt-1">
-                        {tier.description || "Access to event"}
-                      </p>
-
-                      <div className="mt-3 text-xs font-medium uppercase tracking-wider">
-                        <span className="text-indigo-600 bg-indigo-100 px-2 py-1 rounded">
-                          {tier.available || "Limited"} left
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-2xl font-black text-indigo-600">
-                        KES {tier.price}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-400 italic">No ticket tiers available</p>
-          )}
+          <p className="text-slate-500 font-medium mt-1">{event.title}</p>
         </div>
+      </div>
 
-        {/* RIGHT: SUMMARY */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-24 bg-white dark:bg-slate-800 p-8 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-xl">
-            <h2 className="text-xl font-bold mb-6 dark:text-white">
-              Order Summary
-            </h2>
-
-            {selectedTier ? (
-              <div className="space-y-4">
-                {/* Quantity */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Quantity</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={quantity}
-                    onChange={(e) =>
-                      setQuantity(Math.max(1, Number(e.target.value)))
-                    }
-                    className="w-20 p-2 border rounded"
-                  />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* LEFT: Ticket Tiers */}
+        <div className="lg:col-span-7 space-y-4">
+          {event.ticketTiers?.map((tier) => (
+            <motion.div
+              key={tier.name}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={() => setSelectedTier(tier)}
+              className={`p-6 rounded-[2rem] border-2 transition-all cursor-pointer relative overflow-hidden ${
+                selectedTier?.name === tier.name
+                  ? "border-indigo-600 bg-indigo-50/30 ring-4 ring-indigo-50 dark:bg-indigo-900/10"
+                  : "border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-indigo-200"
+              }`}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-1">
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                      {tier.name}
+                    </h3>
+                    {tier.available < 10 && (
+                      <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-black uppercase">
+                        Selling Fast
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-md">
+                    {tier.description ||
+                      "Standard entry and access to all main event areas."}
+                  </p>
                 </div>
 
-                {/* Price */}
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>
-                    {selectedTier.name} x {quantity}
-                  </span>
-                  <span>KES {selectedTier.price * quantity}</span>
-                </div>
-
-                {/* Total */}
-                <div className="pt-4 border-t flex justify-between font-black text-xl dark:text-white">
-                  <span>Total</span>
-                  <span>KES {selectedTier.price * quantity}</span>
-                </div>
-
-                {/* Buttons */}
-                <div className="pt-6 space-y-3">
-                  <button
-                    onClick={() => handleProceed("BUY_NOW")}
-                    className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition"
-                  >
-                    <Zap size={18} /> Buy Now
-                  </button>
-
-                  <button
-                    onClick={() => handleProceed("CART")}
-                    className="w-full bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-200 transition"
-                  >
-                    <ShoppingCart size={18} /> Reserve
-                  </button>
+                <div className="text-right">
+                  <p className="text-2xl font-black text-indigo-600">
+                    KES {tier.price.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                    Per Ticket
+                  </p>
                 </div>
               </div>
-            ) : (
-              <p className="text-gray-400 text-center py-10 italic">
-                Select a ticket type to continue
-              </p>
-            )}
+            </motion.div>
+          ))}
+
+          <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-3xl border border-blue-100 dark:border-blue-800 flex gap-4">
+            <Info className="text-blue-500 shrink-0" />
+            <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+              Tickets are digital and will be sent to your email immediately
+              after a successful M-Pesa or Card payment.
+            </p>
+          </div>
+        </div>
+
+        {/* RIGHT: Dynamic Summary */}
+        <div className="lg:col-span-5">
+          <div className="sticky top-24 bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl shadow-indigo-200/20">
+            <h2 className="text-2xl font-bold mb-8 flex items-center gap-2">
+              Checkout Summary
+            </h2>
+
+            <AnimatePresence mode="wait">
+              {selectedTier ? (
+                <motion.div
+                  key={selectedTier.name}
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  className="space-y-6"
+                >
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
+                    <span className="text-slate-400 font-bold">Quantity</span>
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                        className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center hover:bg-white/10"
+                      >
+                        -
+                      </button>
+                      <span className="text-xl font-black">{quantity}</span>
+                      <button
+                        onClick={() => setQuantity(quantity + 1)}
+                        className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center hover:bg-white/10"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-4 border-t border-white/10">
+                    <div className="flex justify-between text-slate-400 font-medium">
+                      <span>{selectedTier.name} Access</span>
+                      <span>
+                        KES {(selectedTier.price * quantity).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-400 font-medium">
+                      <span>Service Fee</span>
+                      <span>KES 0.00</span>
+                    </div>
+                    <div className="flex justify-between items-end pt-6">
+                      <span className="text-lg font-bold">Total Amount</span>
+                      <span className="text-3xl font-black text-indigo-400">
+                        KES {(selectedTier.price * quantity).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-8 space-y-3">
+                    <button
+                      onClick={() => handleProceed("BUY_NOW")}
+                      className="w-full bg-indigo-600 text-white py-5 rounded-[2rem] font-black text-xl flex items-center justify-center gap-3 hover:bg-indigo-700 transition-all active:scale-95 shadow-xl shadow-indigo-500/20"
+                    >
+                      <Zap size={22} fill="currentColor" /> Buy Now
+                    </button>
+
+                    <button
+                      onClick={() => handleProceed("CART")}
+                      className="w-full bg-white/10 text-white py-5 rounded-[2rem] font-bold text-lg flex items-center justify-center gap-3 hover:bg-white/20 transition-all active:scale-95"
+                    >
+                      <ShoppingCart size={20} /> Add to Cart
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="py-20 text-center text-slate-500 italic">
+                  Please select a ticket type to view total.
+                </div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

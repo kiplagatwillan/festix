@@ -1,4 +1,3 @@
-// src/routes/eventRoutes.js
 import express from "express";
 import {
   createEvent,
@@ -14,13 +13,12 @@ import { upload } from "../middlewares/uploadMiddleware.js";
 
 const router = express.Router();
 
-/*
-|--------------------------------------------------------------------------
-| ORGANIZER ROUTES
-|--------------------------------------------------------------------------
-| Routes that require authentication and specific roles
-| These must come before dynamic :id routes to prevent conflicts
-*/
+/**
+ * @route   GET /api/events/my-events
+ * @desc    Get all events created by the logged-in organizer
+ * @access  Private (Organizer/Admin)
+ * NOTE: Placed before /:id to avoid route collision
+ */
 router.get(
   "/my-events",
   protect,
@@ -28,22 +26,19 @@ router.get(
   getOrganizerEvents,
 );
 
-/*
-|--------------------------------------------------------------------------
-| PUBLIC ROUTES
-|--------------------------------------------------------------------------
-| Accessible to everyone
-*/
+/**
+ * @route   GET /api/events
+ * @desc    Get all events (supports search/filter via query params)
+ * @access  Public
+ */
 router.get("/", getEvents);
 
-/*
-|--------------------------------------------------------------------------
-| CREATE EVENT
-|--------------------------------------------------------------------------
-| Supports image upload from frontend form
-| 'image' must match the frontend input field name
-| ✅ TicketTiers validation handled in controller
-*/
+/**
+ * @route   POST /api/events
+ * @desc    Create a new event with ticket tiers and image upload
+ * @access  Private (Organizer/Admin)
+ * ✅ upload.single("image") matches frontend data.append("image", file)
+ */
 router.post(
   "/",
   protect,
@@ -52,14 +47,11 @@ router.post(
   createEvent,
 );
 
-/*
-|--------------------------------------------------------------------------
-| EVENT BY ID ROUTES
-|--------------------------------------------------------------------------
-| Dynamic routes that operate on a specific event ID
-| Includes GET, PUT (with image support), and DELETE
-| ✅ TicketTiers validation handled in controller
-*/
+/**
+ * @route   /api/events/:id
+ * @desc    Operations on a specific event
+ * @access  Public (GET), Private (PUT/DELETE)
+ */
 router
   .route("/:id")
   .get(getEventById)

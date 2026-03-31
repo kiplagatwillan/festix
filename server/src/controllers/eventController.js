@@ -34,11 +34,19 @@ export const createEvent = asyncHandler(async (req, res) => {
     0,
   );
 
-  let finalImageUrl = CATEGORY_IMAGES[category] || CATEGORY_IMAGES["General"];
+  /**
+   * ✅ IMAGE FIX: Priority Logic
+   * 1. Multer File (req.file)
+   * 2. Manual URL (imageUrl)
+   * 3. Category Default
+   */
+  let finalImageUrl;
   if (req.file) {
     finalImageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
   } else if (imageUrl && imageUrl.trim() !== "" && imageUrl !== "undefined") {
     finalImageUrl = imageUrl.trim();
+  } else {
+    finalImageUrl = CATEGORY_IMAGES[category] || CATEGORY_IMAGES["General"];
   }
 
   const event = await prisma.event.create({
@@ -94,11 +102,14 @@ export const updateEvent = asyncHandler(async (req, res) => {
     category: category || event.category,
   };
 
-  // Handle Image Update
+  /**
+   * ✅ IMAGE UPDATE FIX:
+   * Only update if a new file or new URL is provided.
+   */
   if (req.file) {
     updateData.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-  } else if (imageUrl) {
-    updateData.imageUrl = imageUrl;
+  } else if (imageUrl && imageUrl !== "undefined" && imageUrl.trim() !== "") {
+    updateData.imageUrl = imageUrl.trim();
   }
 
   const updatedEvent = await prisma.event.update({
@@ -179,7 +190,7 @@ export const getOrganizerEvents = asyncHandler(async (req, res) => {
 });
 
 /* =====================================================
- DELETE EVENT (Fixed with Cascading Transaction)
+ DELETE EVENT (Cascading Transaction)
 ===================================================== */
 export const deleteEvent = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -193,17 +204,10 @@ export const deleteEvent = asyncHandler(async (req, res) => {
       .json({ message: "Not authorized to delete this event" });
   }
 
-  /**
-   * ✅ FIX: Use a Transaction to delete children first.
-   * This prevents the "Foreign Key Constraint" 500 error.
-   */
   try {
     await prisma.$transaction([
-      // 1. Delete associated ticket tiers
       prisma.ticketTier.deleteMany({ where: { eventId: id } }),
-      // 2. Delete associated tickets (if applicable in your schema)
       prisma.ticket?.deleteMany({ where: { eventId: id } }),
-      // 3. Finally delete the event
       prisma.event.delete({ where: { id } }),
     ]);
 
