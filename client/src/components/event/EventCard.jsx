@@ -1,7 +1,7 @@
-// src/components/EventCard.jsx
 import React from "react";
-import { Calendar, MapPin, ArrowRight } from "lucide-react";
+import { Calendar, MapPin, Ticket, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 
 const EventCard = ({ event }) => {
   const fallbackImage =
@@ -9,113 +9,116 @@ const EventCard = ({ event }) => {
 
   const isLowStock = event.availableTickets > 0 && event.availableTickets < 10;
   const isSoldOut = event.availableTickets === 0;
-
-  // ✅ FIXED: Removed cache-busting query
   const imageSrc = event.imageUrl || fallbackImage;
 
-  // ✅ Compute lowest ticket price dynamically
+  // ✅ Dynamic Price Logic
   const lowestPrice =
     event.ticketTiers?.length > 0
       ? Math.min(...event.ticketTiers.map((t) => t.price))
       : 0;
 
-  // ✅ Check if event has ticket tiers
-  const hasTiers = event.ticketTiers && event.ticketTiers.length > 0;
-
   return (
-    <div className="event-card group bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-md hover:shadow-xl transition-shadow duration-300 max-w-sm mx-auto">
-      {/* Image */}
-      <div className="relative h-40 overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      whileHover={{ y: -8 }}
+      className="group relative bg-white dark:bg-[#1e293b] rounded-[2rem] overflow-hidden shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500 border border-slate-100 dark:border-slate-800 w-full max-w-[300px] mx-auto"
+    >
+      {/* IMAGE SECTION */}
+      <div className="relative h-44 overflow-hidden">
         <img
           src={imageSrc}
           alt={event.title}
-          onError={(e) => {
-            e.target.onerror = null;
-            e.target.src = fallbackImage;
-          }}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
 
-        <div className="absolute top-3 right-3 bg-white/90 px-2 py-1 rounded-full text-[10px] font-bold text-indigo-600 uppercase">
-          {event.category}
+        {/* Floating Category Badge */}
+        <div className="absolute top-4 left-4 bg-white/20 backdrop-blur-md border border-white/30 px-3 py-1 rounded-full">
+          <span className="text-[10px] font-black text-white uppercase tracking-widest">
+            {event.category}
+          </span>
         </div>
+
+        {/* Status Overlay */}
+        {isSoldOut && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center">
+            <span className="bg-red-500 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-tighter shadow-lg">
+              Sold Out
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Content */}
-      <div className="p-4 flex flex-col justify-between h-full">
-        <div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1 truncate">
+      {/* CONTENT SECTION */}
+      <div className="p-5">
+        <div className="mb-4">
+          <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight truncate group-hover:text-indigo-600 transition-colors">
             {event.title}
           </h3>
 
-          <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400 mb-3">
-            <div className="flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              {new Date(event.date).toLocaleDateString()}
-            </div>
-            <div className="flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" />
-              {event.venue}
-            </div>
-          </div>
-
-          {/* Price */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-indigo-600">
-                From KES {lowestPrice}
+          <div className="mt-2 space-y-1.5">
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-[11px] font-bold">
+                {new Date(event.date).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                })}
               </span>
-
-              {isLowStock && (
-                <p className="text-[10px] text-red-500 font-bold animate-pulse">
-                  ONLY {event.availableTickets} LEFT!
-                </p>
-              )}
             </div>
-
-            {/* Optional: show tiers */}
-            {hasTiers && (
-              <ul className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
-                {event.ticketTiers.map((tier) => (
-                  <li key={tier.id}>
-                    {tier.name}: KES {tier.price} ({tier.available || "—"} left)
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-[11px] font-bold truncate">
+                {event.venue}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="flex items-center justify-between mt-4">
-          {/* DETAILS */}
+        {/* PRICING AREA */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+              Starting From
+            </span>
+            <span className="text-lg font-black text-slate-900 dark:text-white">
+              <span className="text-xs text-indigo-600 mr-0.5">KES</span>{" "}
+              {lowestPrice.toLocaleString()}
+            </span>
+          </div>
+          {isLowStock && (
+            <div className="bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-lg border border-red-100 dark:border-red-900/30">
+              <p className="text-[9px] text-red-600 font-black animate-pulse uppercase">
+                {event.availableTickets} Left!
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ACTION BUTTONS */}
+        <div className="grid grid-cols-2 gap-3">
           <Link
             to={`/events/${event.id}`}
-            className="flex-1 text-center bg-gray-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-600 transition"
+            className="flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl text-[11px] font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           >
-            Details <ArrowRight className="inline-block w-3 h-3 ml-1" />
+            Details
           </Link>
 
-          {/* BUY TICKET */}
           <Link
-            to={hasTiers ? `/event/${event.id}/tickets` : "#"}
-            onClick={(e) => {
-              if (!hasTiers) {
-                e.preventDefault();
-                alert("No ticket tiers available for this event");
-              }
-            }}
-            className={`ml-2 flex-1 text-center px-3 py-1.5 rounded-lg font-bold text-xs transition ${
-              isSoldOut || !hasTiers
-                ? "bg-gray-400 text-gray-700 cursor-not-allowed"
-                : "bg-indigo-600 text-white hover:bg-indigo-700"
+            to={isSoldOut ? "#" : `/event/${event.id}/tickets`}
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black transition-all shadow-md active:scale-95 ${
+              isSoldOut
+                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 dark:shadow-none"
             }`}
           >
-            {isSoldOut ? "Sold Out" : !hasTiers ? "Unavailable" : "Buy Ticket"}
+            <Ticket className="w-3 h-3" />
+            Buy Now
           </Link>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
